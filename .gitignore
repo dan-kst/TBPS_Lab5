@@ -1,0 +1,16 @@
+# Ignore Meson's build directory
+/build/
+
+# Ignore IDE/editor files
+.geany/
+*.geany
+.vscode/
+
+# Ignore compiled outputs (though they should be in builddir)
+*.exe
+*.o
+*.so
+*.dll
+
+# Ignore personal config files
+*.ini
