@@ -78,7 +78,7 @@ protected:
 			std::to_string(dim.second) + filename_temp.second;
 			
 			// Set matrix
-			solver.SetMatrix(m_base, dim.first, dim.second);
+			solver.SetMatrix(m_base, {6, 6}, dim);
 			
 			// Write matrix to the file
 			solver.Serialize_Matrix_TXT(filename);
@@ -106,7 +106,7 @@ protected:
 		SetSerializedMatrixes(solver, {DEFAULT_MATRIX, FILE_TYPE}, default_matrixes, 
 		{{2, 3}, {3, 4}, {5, 6}});
 
-		solver.SetMatrix(m_base, 6, 6);
+		solver.SetMatrix(m_base, {6, 6}, {6, 6});
 		SetSerializedCorruptedMatrixes(solver, {WRONG_MATRIX, FILE_TYPE}, wrong_matrixes_files, 
 		{{1, 2}, {3, 2}, {10, 10}});
 	}
@@ -151,4 +151,33 @@ TEST_F(MatrixIOTest, DeserializesNoFileCorrectly) {
 		actual_solver.Deserialize_Matrix_TXT(""),
 		std::invalid_argument
 	);
+}
+
+class GaussSolverTest : public ::testing::Test{};
+
+TEST_F(GaussSolverTest, GaussSolutionDefaultMatrix){
+	GaussSolver sol_actual;
+	std::vector<double> mat_expected = {1, 2, 5, 3, 4, 11};
+	std::vector<double> sol_expected = {1, 2};
+	
+	sol_actual.SetMatrix(mat_expected, {2, 3}, {2, 3});
+	EXPECT_TRUE(sol_actual.SolveGauss(false));
+	
+	EXPECT_EQ(sol_actual.GetSolution(), sol_expected);
+}
+
+TEST_F(GaussSolverTest, GaussSolutionSingularMatrixNoSolutions){
+	GaussSolver sol_actual;
+	std::vector<double> mat_expected = {0, 2, 5, 0, 4, 11};
+	
+	sol_actual.SetMatrix(mat_expected, {2, 3}, {2, 3});
+	EXPECT_FALSE(sol_actual.SolveGauss(false));
+}
+
+TEST_F(GaussSolverTest, GaussSolutionSingularMatrixInfiniteSolutions){
+	GaussSolver sol_actual;
+	std::vector<double> mat_expected = {1, 2, 5, 0, 0, 0};
+	
+	sol_actual.SetMatrix(mat_expected, {2, 3}, {2, 3});
+	EXPECT_FALSE(sol_actual.SolveGauss(false));
 }

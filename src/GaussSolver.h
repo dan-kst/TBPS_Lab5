@@ -37,14 +37,15 @@ public:
 	
 	const std::vector<double>& GetMatrix() const;
 	/**
-	 * @brief Make copy of the given matrix.
+	 * @brief Make copy of the given matrix with given dimentions.
 	 */
-	void SetMatrix(const std::vector<double>& newMatrix, size_t rows, size_t cols);
+	void SetMatrix(const std::vector<double>& newMatrix, 
+		const std::pair<size_t, size_t>& source_dims, const std::pair<size_t, size_t>& copy_dims);
 	
 	/**
-	 * @brief Prints the solution vector to the console.
+	 * @brief Get the solution vector.
 	 */
-	void GetSolution() const;
+	const std::vector<double>& GetSolution() const;
 	
 	bool operator==(const GaussSolver &rhs) const;
 	

@@ -29,6 +29,33 @@ size_t GaussSolver::GetRows() const { return m_rows; }
 size_t GaussSolver::GetCols() const { return m_cols; }
 
 
+// --- Set/Get ---
+
+void GaussSolver::SetMatrix(
+		const std::vector<double>& source_data, 
+		const std::pair<size_t, size_t>& source_dims, 
+		const std::pair<size_t, size_t>& copy_dims
+){
+	if(copy_dims.first > source_data.size() || copy_dims.second > source_data.size())	
+		throw std::out_of_range("Cant Set Matrix: Size is out of range.");
+	
+	m_rows = copy_dims.first;
+	m_cols = copy_dims.second;
+	mat_data.resize(m_rows * m_cols);
+
+	for(size_t i = 0; i < m_rows; i++){
+		for(size_t j = 0; j < m_cols; j++){
+			mat_data[i * m_cols + j] = source_data[i * source_dims.second + j];
+		}
+	}
+}
+
+const std::vector<double>& GaussSolver::GetMatrix() const { return mat_data; }
+
+
+const std::vector<double>& GaussSolver::GetSolution() const { return sol_data; }
+
+
 bool GaussSolver::operator==(const GaussSolver &rhs) const {
 	return 	m_rows == rhs.m_rows &&
 			m_cols == rhs.m_cols &&
@@ -61,43 +88,45 @@ void GaussSolver::Generate(size_t size, double min_range, double max_range) {
 
 bool GaussSolver::SolveGauss(const bool& isParallel) {
 	// Create a working copy of the data so the original mat_data isn't destroyed
-	std::vector<double> matrixCopy = mat_data;
-
+	std::vector<double>& matrixCopy = mat_data;
 	// ----------------------------------
 	// Part 1: Forward Elimination
 	// ----------------------------------
 	for (size_t k = 0; k < m_rows; ++k) {
 		// 1. Find pivot row (partial pivoting)
 		size_t abs_max_i = k;
+		size_t better_row_diagonal_value = abs_max_i * m_cols + k;
 		for (size_t i = k + 1; i < m_rows; ++i) {
-			if (std::abs(matrixCopy[i * m_cols + k]) > std::abs(matrixCopy[abs_max_i * m_cols + k])) {
+			size_t current_row_diagonal_value = i * m_cols + k;
+			if (std::abs(matrixCopy[current_row_diagonal_value]) > std::abs(matrixCopy[better_row_diagonal_value])) {
 				abs_max_i = i;
 			}
 		}
 
 		// 2. Check for singular matrix
 		// (Use 1e-10 for floating point 'zero' comparison)
-		if (std::abs(matrixCopy[abs_max_i * m_cols + k]) < 1e-10) {
+		if (std::abs(matrixCopy[better_row_diagonal_value]) < 1e-10) {
 			return false; // Return false (no unique solution)
 		}
-
+		
 		// 3. Swap current row (k) with pivot row (abs_max_i)
 		if (abs_max_i != k) {
-			//matrixCopy[k].swap(matrixCopy[abs_max_i]);
-			for(size_t j = 0; j < m_cols; j++){
-				double temp_value = mat_data[k * m_cols + j];
-				mat_data[k * m_cols + j] = mat_data[abs_max_i * m_cols + j];
-				mat_data[abs_max_i * m_cols + j] = temp_value;
-			}			
+			for(size_t j = k; j < m_cols; j++){
+				size_t current_pivot_row = k * m_cols + j;
+				size_t better_pivot_row = abs_max_i * m_cols + j;
+				
+				double temp_value = matrixCopy[current_pivot_row];
+				matrixCopy[current_pivot_row] = matrixCopy[better_pivot_row];
+				matrixCopy[better_pivot_row] = temp_value;
+			}
 		}
-
-		if(isParallel)
-			#pragma omp parallel for
 		
+		#pragma omp parallel for if(isParallel)
 		// 4. Eliminate
-		for (size_t i = k + 1; i < m_rows; ++i) {
+		for (size_t i = k + 1; i < m_rows; i++) {
+			
 			double factor = matrixCopy[i * m_cols + k] / matrixCopy[k * m_cols + k];
-			for (size_t j = k; j < m_cols; ++j) {
+			for (size_t j = 0; j < m_cols; ++j) {
 				matrixCopy[i * m_cols + j] = matrixCopy[i * m_cols + j] - factor * matrixCopy[k * m_cols + j];
 			}
 		}
@@ -106,43 +135,31 @@ bool GaussSolver::SolveGauss(const bool& isParallel) {
 	// ----------------------------------
 	// Part 2: Back Substitution
 	// ----------------------------------
-	sol_data.reserve(m_rows);
+	size_t last_row_i = m_rows - 1;
+	size_t b_col_j = m_cols - 1;
+	size_t A_col_j = m_rows - 1;
+
+	size_t b_index = last_row_i * m_cols + b_col_j;
+	size_t A_index = last_row_i * m_cols + A_col_j;
+	
+	sol_data.resize(m_rows);
 
 	// 1. Solve for the last variable
-	sol_data[m_rows - 1] = matrixCopy[(m_rows - 1) * m_cols + m_rows] / matrixCopy[(m_rows - 1) * m_cols + (m_rows - 1)];
+	sol_data[last_row_i] = matrixCopy[b_index] / matrixCopy[A_index];
 
 	// 2. Loop backward from second-to-last row
-	for (int i = m_rows - 2; i >= 0; --i) {
+	for (int i = m_rows - 2; i >= 0; i--) {
 		double sum = 0.0;
-		for (size_t j = i + 1; j < m_rows; ++j) {
+		for (size_t j = i + 1; j < m_cols; j++) {
 			sum += matrixCopy[i * m_cols + j] * sol_data[j];
 		}
-		sol_data[i] = (matrixCopy[i * m_cols + m_rows] - sum) / matrixCopy[i * m_cols + i];
+		sol_data[i] = (matrixCopy[i * m_cols + b_col_j] - sum) / matrixCopy[i * m_cols + i];
 	}
-
+	
 	return true;
 }
 
-// --- Input/Output ---
-
-void GaussSolver::SetMatrix(const std::vector<double>& newMatrix, size_t new_rows, size_t new_cols){
-	if(new_rows > newMatrix.size() || new_cols > newMatrix.size())	
-		throw std::out_of_range("Cant Set Matrix: Size is out of range.");
-	
-	m_rows = new_rows;
-	m_cols = new_cols;
-	mat_data.resize(m_rows * m_cols);
-
-	for(size_t i = 0; i < m_rows; i++){
-		for(size_t j = 0; j < m_cols; j++){
-			if (i < m_rows && j < m_cols) {
-				mat_data[i * m_cols + j] = newMatrix[i * m_cols + j];
-			} else {
-				mat_data[i * m_cols + j] = 0.0;
-			}
-		}
-	}
-}
+// --- Output ---
 
 void GaussSolver::PrintMatrix() const {
 	if (m_rows == 0 && m_cols == 0) {
@@ -154,14 +171,19 @@ void GaussSolver::PrintMatrix() const {
 	for (size_t i = 0; i < m_rows; ++i) {
 		std::cout << "[ ";
 		for (size_t j = 0; j < m_cols; ++j) {
-			std::cout << std::setw(8) << std::fixed << std::setprecision(2) << mat_data[i * m_cols + j] << " ";
+			std::cout << std::setw(8) << std::fixed << std::setprecision(2) << mat_data[i * m_cols + j];
+			if(j == m_cols - 2)
+				std::cout << "| ";
+			else if(j == m_cols - 1)
+				std::cout << " ]\n";
+			else
+				std::cout  << " ";
 		}
-		std::cout << "| " << std::setw(8) << std::fixed << std::setprecision(2) << mat_data[i * m_cols + m_cols] << " ]\n";
 	}
 	std::cout.copyfmt(std::ios(NULL)); // Reset cout formatting
 }
 
-void PrintSolution(const std::vector<double>& sol_data) {
+void GaussSolver::PrintSolution() const{
     if (sol_data.empty()) {
         std::cout << "No unique sol_data exists (mat_data is singular)." << std::endl;
         return;
@@ -172,6 +194,10 @@ void PrintSolution(const std::vector<double>& sol_data) {
         std::cout << "x[" << i << "] = " << sol_data[i] << std::endl;
     }
 }
+
+
+
+// --- Save/Load ---
 
 void GaussSolver::Serialize_Solution_TXT(const std::string& filename) const{
     std::ofstream outFile(filename);
