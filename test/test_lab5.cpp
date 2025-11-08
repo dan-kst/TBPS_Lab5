@@ -2,109 +2,153 @@
 #include "../src/GaussSolver.h"
 #include <vector>
 #include <string>
+#include <sstream>
+#include <filesystem>
 
 // Використовуємо "Test Fixture", щоб не дублювати дані
 class MatrixIOTest : public ::testing::Test {
-protected:	
-	struct TestMatrix{
+protected:
+	// --- Helper Struct and Data ---
+	struct TestSolver {
 		const std::string filename;
-		GaussSolver matrix;
+		const GaussSolver solver;
 		
-		// Helper constructor for the TestMatrix for convinience
-		TestMatrix(const std::string filename, GaussSolver m) : filename(filename), matrix(m){}
+		// Helper constructor for the TestSolver for convinience
+		TestSolver(const std::string filename, GaussSolver s) : filename(filename), solver(s){}	
 	};
 
-	const std::string TEST_MATRIX_PATH = "./test/";	
+	// Filename templates
+	const std::string DEFAULT_MATRIX = "DEFAULT_MATRIX_";
+	const std::string WRONG_MATRIX = "WRONG_MATRIX_";
+	const std::string SINGULAR_MATRIX = "SINGULAR_MATRIX_";
+	const std::string FILE_TYPE = ".txt";
 
-	const std::string TEST_MATRIX_1_TXT = "m_def_2x2.txt";
-	const std::string TEST_MATRIX_2_TXT = "m_def_3x3.txt";
-	const std::string TEST_MATRIX_3_TXT = "m_def_5x5.txt";
+	// Base data
+	std::vector<double> m_base;
 
-	const std::string TEST_MATRIX_4_TXT = "m_wrong_1x2.txt";
-	const std::string TEST_MATRIX_5_TXT = "m_wrong_3x2.txt";
-	const std::string TEST_MATRIX_6_TXT = "m_wrong_3x3.txt";
+	// Our test data vectors
+	std::vector<TestSolver> default_matrixes;
+	std::vector<std::string> wrong_matrixes_files;
 
-	const std::string TEST_MATRIX_7_TXT = "m_singular_3x3.txt";
-	const std::string TEST_MATRIX_8_TXT = "m_sing_5x5.txt";
-	std::vector<std::vector<double>> m_6x6;
+	// --- Our New Helper Function ---
+	// Inside MatrixIOTest
+	void SetSerializedCorruptedMatrixes(
+		const GaussSolver& solver,				// The solver with the *actual* data
+		const std::pair<std::string, std::string>& filename_temp, 
+		std::vector<std::string>& matrixes_files, 
+		const std::vector<std::pair<size_t, size_t>>& dims)			// The *fake* rows and cols to write to the header
+	{	
+		for(const auto& dim : dims){
+			std::string filename = filename_temp.first + 
+			std::to_string(dim.first) + "x" + 
+			std::to_string(dim.second) + filename_temp.second;
+			
+			
+			std::ofstream outFile(filename);
+			if (!outFile.is_open()) {
+				throw std::invalid_argument("Error: Could not open file for reading: " + filename);
+			}
 
+			// 1. Write the FAKE header
+			outFile << dim.first << " " << dim.second << "\n";
+
+			// 2. Write the REAL matrix data
+			for (size_t i = 0; i < solver.GetRows(); ++i) {		// Loop over *real* rows
+				for (size_t j = 0; j < solver.GetCols(); ++j) {	// Loop over *real* cols
+					outFile << solver.Get(i, j) << " ";
+				}
+				outFile << "\n";
+			}
+			outFile.close();
+			
+			matrixes_files.push_back(filename);
+		}
+	}
 	
-	std::vector<TestMatrix> default_matrixes;
-	std::vector<TestMatrix> wrong_matrixes;
-	std::vector<TestMatrix> singular_matrixes;
+	void SetSerializedMatrixes(
+		GaussSolver& solver,
+		const std::pair<std::string, std::string>& filename_temp, 
+		std::vector<TestSolver>& matrixes, 
+		const std::vector<std::pair<size_t, size_t>>& dims)
+	{
+		for (const auto& dim : dims) {
+			// Set filename of the matrix
+			std::string filename = filename_temp.first + 
+			std::to_string(dim.first) + "x" + 
+			std::to_string(dim.second) + filename_temp.second;
+			
+			// Set matrix
+			solver.SetMatrix(m_base, dim.first, dim.second);
+			
+			// Write matrix to the file
+			solver.Serialize_Matrix_TXT(filename);
+			
+			// Add matrix and its filename to vector
+			matrixes.emplace_back(filename, solver);
+		}
+	}
 
+	// --- Our Cleaner SetUp() ---
+	void SetUp() override {
+		// 1. Setup the base data
+		m_base = {
+			11.1, 5.6, 9.0, 11.8, -5.7, 12.0,
+			-17.4, -3.6, 7.0, -1.5, 6.7, 9.5,
+			-3.4, -3.6, 2.2, 19.2, 13.5, 8.0,
+			17.4, -3.6, 7.1, 4.4, -4.1, -14.4,
+			12.0, -2.5, 0.9, 1.8, -3.7, -2.6,
+			-1.0, 3.0, 0.25, 0.0, 8.7, 7.6
+		};
+
+		GaussSolver solver; // Create the solver *once*
+
+		// 2. Generate all test cases using our helper
+		SetSerializedMatrixes(solver, {DEFAULT_MATRIX, FILE_TYPE}, default_matrixes, 
+		{{2, 3}, {3, 4}, {5, 6}});
+
+		solver.SetMatrix(m_base, 6, 6);
+		SetSerializedCorruptedMatrixes(solver, {WRONG_MATRIX, FILE_TYPE}, wrong_matrixes_files, 
+		{{1, 2}, {3, 2}, {10, 10}});
+	}
 	
-    void SetUp() override {
-		GaussSolver solver(false);
-		m_6x6.push_back({11.1, 5.6, 9.0, 11.8, -5.7, 12.0});
-		m_6x6.push_back({-17.4, -3.6, 7.0, -1.5, 6.7, 9.5});
-		m_6x6.push_back({-3.4, -3.6, 2.2, 19.2, 13.5, 8.0});
-		m_6x6.push_back({17.4, -3.6, 7.1, 4.4, -4.1, -14.4});
-		m_6x6.push_back({-12.0, -2.5, 0.9, 1.8, -3.7, -2.6});
-		m_6x6.push_back({-1.0, 3.0, 0.25, 0.0, 8.7, 7.6});
+	void Output(const GaussSolver& actual, const GaussSolver& expected, size_t count = 0){
+		std::cout << "\nTest :" << std::to_string(count) << std::endl;
+		std::cout << "\nExpected: " << std::endl;
+		expected.PrintMatrix();
 		
-		// maxtrix_default_2x2
-		solver.SetMatrix(m_6x6, 2, 2);
-		//default_matrixes.emplace_back(TEST_MATRIX_1_TXT, solver);
-		// maxtrix_default_3x3
-		//solver.SetMatrix(m_6x6, 3, 3);
-		//default_matrixes.emplace_back(TEST_MATRIX_2_TXT, solver);
-		// maxtrix_default_5x5
-		//solver.SetMatrix(m_6x6, 5, 5);
-		//default_matrixes.emplace_back(TEST_MATRIX_3_TXT, solver);
-		
-		
-		// maxtrix_wrong_1x2
-		//solver.SetMatrix(m_6x6, 1, 2);
-		//wrong_matrixes.emplace_back(TEST_MATRIX_3_TXT, solver);
-		// maxtrix_wrong_3x2
-		//solver.SetMatrix(m_6x6, 3, 2);
-		//wrong_matrixes.emplace_back(TEST_MATRIX_3_TXT, solver);
-		
-		// maxtrix_singular_3x3
-		//solver.SetMatrix(m_6x6, 5, 5);
-		//singular_matrixes.emplace_back(TEST_MATRIX_3_TXT, solver);
-		
-
+		std::cout << "\nActual: " << std::endl;
+		actual.PrintMatrix();
 	}
 };
 
-TEST_F(MatrixIOTest, DeserializeDefaultMatrixNoFile) {
-	GaussSolver actual(false);
-	actual.Deserialize_Matrix_TXT(TEST_MATRIX_PATH + TEST_MATRIX_1_TXT);
+
+TEST_F(MatrixIOTest, DeserializesDefaultMatrixCorrectly) {
+	GaussSolver actual_solver;
 	
-	int expectSize = 10;
-	int actualSize = actual.GetSize();
-	
-	EXPECT_EQ(actualSize,expectSize);
-	//EXPECT_THROW(actual.Deserialize_Matrix_TXT(TEST_MATRIX_PATH + TEST_MATRIX_1_TXT), std::invalid_argument);
+	for(const auto& expected : default_matrixes){
+		actual_solver.Deserialize_Matrix_TXT(expected.filename);
+		
+		EXPECT_EQ(actual_solver, expected.solver);
+	}
 }
 
-TEST_F(MatrixIOTest, DeserializeDefaultMatrixCorrectly) {
-	//GaussSolver actual(false);
+TEST_F(MatrixIOTest, DeserializesWrongMatrixCorrectly) {
+	GaussSolver actual_solver;
 	
-	EXPECT_EQ(1, 1);
-	/*
-	size_t test_matrixes_size = default_matrixes.size();
-	size_t actualSize, expectSize;
-	std::cerr << "Hello World" << std::endl;
-	
-	for(size_t i = 0; i < test_matrixes_size; i++){
-		expectSize = default_matrixes[i].matrix.GetSize();
-
-		actual.Deserialize_Matrix_TXT(TEST_MATRIX_PATH + TEST_MATRIX_1_TXT);
-		actualSize = actual.GetSize();
-
-		EXPECT_EQ(actualSize, expectSize);
-
-		//for(size_t k = 0; k < actualSize; k++)
-			//for(size_t j = 0; j < actualSize; j++)
-				//EXPECT_EQ(actual[k][j], default_matrixes[i].matrix[i][j]);
-	}*/
+	for(const auto& expected : wrong_matrixes_files){
+		EXPECT_THROW(
+			actual_solver.Deserialize_Matrix_TXT(expected),
+			std::runtime_error
+		);
+	}
 }
 
-TEST_F(MatrixIOTest, DeserializeMatrixWrong) {
 
-	EXPECT_EQ(1,1);
-
+TEST_F(MatrixIOTest, DeserializesNoFileCorrectly) {
+	GaussSolver actual_solver;
+	
+	EXPECT_THROW(
+		actual_solver.Deserialize_Matrix_TXT(""),
+		std::invalid_argument
+	);
 }

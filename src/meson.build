@@ -1,4 +1,4 @@
-#Labs/Lab5/meson.build
+#Labs/Lab5/src/meson.build
 
 omp_dep = dependency('openmp')
 

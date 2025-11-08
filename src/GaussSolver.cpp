@@ -3,100 +3,102 @@
 #include <filesystem>
 #include <sstream>
 
-GaussSolver::GaussSolver(bool enable_OpenMP)
- : m_size(0), OpenMP_Enabled(enable_OpenMP) {}
+GaussSolver::GaussSolver()
+ : m_rows(0), m_cols(0){}
+ 
+GaussSolver::GaussSolver(const GaussSolver& other)
+ : 	m_rows(other.m_rows), m_cols(other.m_cols), mat_data(other.mat_data) {}
 
-size_t GaussSolver::GetSize() const { return m_size; }
+double GaussSolver::Get(size_t i, size_t j) const{
+	if(i >= m_rows || j >= m_cols )
+		throw std::out_of_range("Cannot get data: indexes are out of range");
+	
+	return mat_data[i * m_cols + j];
+}
 
-
-std::vector<double>& GaussSolver::operator[](size_t index_i) {
-	if (index_i >= m_size) {
-		throw std::out_of_range("Index is out of the Vector's range.");
-	}
-	return matrix[index_i];
+void GaussSolver::Set(size_t i, size_t j, double value){
+	if(i >= m_rows || j >= m_cols )
+		throw std::out_of_range("Cannot set data: indexes are out of range");
+	
+	mat_data[i * m_cols + j] = value;
 }
 
 
-std::vector<double> GaussSolver::operator[](size_t index_i) const {
-	if (index_i >= m_size) {
-		throw std::out_of_range("Index is out of the Vector's range.");
-	}
-	return matrix[index_i];
+size_t GaussSolver::GetRows() const { return m_rows; }
+
+size_t GaussSolver::GetCols() const { return m_cols; }
+
+
+bool GaussSolver::operator==(const GaussSolver &rhs) const {
+	return 	m_rows == rhs.m_rows &&
+			m_cols == rhs.m_cols &&
+			mat_data == rhs.mat_data;
 }
 
-/*
-double& GaussSolver::operator[](size_t index_i) {
-	if (index >= m_size) {
-		throw std::out_of_range("Index is out of the Vector's range.");
-	}
-	return matrix[index_i][index_j];
-}
 
-double GaussSolver::operator[](size_t index_i) const {
-	if (index >= m_size) {
-		throw std::out_of_range("Index is out of the Vector's range.");
-	}
-	return matrix[index_i][index_j];
-}
-*/
 // --- Core Functionality ---
 
 void GaussSolver::Generate(size_t size, double min_range, double max_range) {
-	m_size = size;
+	m_rows = size;
+	m_cols = m_rows + 1;
 
 	// 1. Setup the random generator
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_real_distribution<double> dist(min_range, max_range);
 
-	// 2. Resize the matrix (n rows, n+1 columns)
-	matrix.clear();
-	matrix.resize(m_size);
-	for (std::vector<double>& row : matrix) {
-		row.resize(m_size + 1);
-	}
+	// 2. Resize the mat_data (n rows, n+1 columns)
+	mat_data.clear();
+	mat_data.resize(m_rows * m_cols);
 
-	// 3. Fill the matrix with random numbers
-	for (size_t i = 0; i < m_size; ++i) {
-		for (size_t j = 0; j < m_size + 1; ++j) {
-			matrix[i][j] = dist(gen);
+	// 3. Fill the mat_data with random numbers
+	for (size_t i = 0; i < m_rows; ++i) {
+		for (size_t j = 0; j < m_cols; ++j) {
+			mat_data[i * m_cols + j] = dist(gen);
 		}
 	}
 }
 
-bool GaussSolver::SolveGauss() {
-	// Create a working copy of the data so the original matrix isn't destroyed
-	std::vector<std::vector<double>> matrixCopy = matrix;
+bool GaussSolver::SolveGauss(const bool& isParallel) {
+	// Create a working copy of the data so the original mat_data isn't destroyed
+	std::vector<double> matrixCopy = mat_data;
 
 	// ----------------------------------
 	// Part 1: Forward Elimination
 	// ----------------------------------
-	for (size_t k = 0; k < m_size; ++k) {
+	for (size_t k = 0; k < m_rows; ++k) {
 		// 1. Find pivot row (partial pivoting)
 		size_t abs_max_i = k;
-		for (size_t i = k + 1; i < m_size; ++i) {
-			if (std::abs(matrixCopy[i][k]) > std::abs(matrixCopy[abs_max_i][k])) {
+		for (size_t i = k + 1; i < m_rows; ++i) {
+			if (std::abs(matrixCopy[i * m_cols + k]) > std::abs(matrixCopy[abs_max_i * m_cols + k])) {
 				abs_max_i = i;
 			}
 		}
 
-		// 2. Check for singular matrixCopy
+		// 2. Check for singular matrix
 		// (Use 1e-10 for floating point 'zero' comparison)
-		if (std::abs(matrixCopy[abs_max_i][k]) < 1e-10) {
+		if (std::abs(matrixCopy[abs_max_i * m_cols + k]) < 1e-10) {
 			return false; // Return false (no unique solution)
 		}
 
 		// 3. Swap current row (k) with pivot row (abs_max_i)
 		if (abs_max_i != k) {
-			matrixCopy[k].swap(matrixCopy[abs_max_i]);
+			//matrixCopy[k].swap(matrixCopy[abs_max_i]);
+			for(size_t j = 0; j < m_cols; j++){
+				double temp_value = mat_data[k * m_cols + j];
+				mat_data[k * m_cols + j] = mat_data[abs_max_i * m_cols + j];
+				mat_data[abs_max_i * m_cols + j] = temp_value;
+			}			
 		}
 
+		if(isParallel)
+			#pragma omp parallel for
+		
 		// 4. Eliminate
-		#pragma omp parallel for
-		for (size_t i = k + 1; i < m_size; ++i) {
-			double factor = matrixCopy[i][k] / matrixCopy[k][k];
-			for (size_t j = k; j < m_size + 1; ++j) {
-				matrixCopy[i][j] = matrixCopy[i][j] - factor * matrixCopy[k][j];
+		for (size_t i = k + 1; i < m_rows; ++i) {
+			double factor = matrixCopy[i * m_cols + k] / matrixCopy[k * m_cols + k];
+			for (size_t j = k; j < m_cols; ++j) {
+				matrixCopy[i * m_cols + j] = matrixCopy[i * m_cols + j] - factor * matrixCopy[k * m_cols + j];
 			}
 		}
 	}
@@ -104,18 +106,18 @@ bool GaussSolver::SolveGauss() {
 	// ----------------------------------
 	// Part 2: Back Substitution
 	// ----------------------------------
-	solution.reserve(m_size);
+	sol_data.reserve(m_rows);
 
 	// 1. Solve for the last variable
-	solution[m_size - 1] = matrixCopy[m_size - 1][m_size] / matrixCopy[m_size - 1][m_size - 1];
+	sol_data[m_rows - 1] = matrixCopy[(m_rows - 1) * m_cols + m_rows] / matrixCopy[(m_rows - 1) * m_cols + (m_rows - 1)];
 
 	// 2. Loop backward from second-to-last row
-	for (int i = m_size - 2; i >= 0; --i) {
+	for (int i = m_rows - 2; i >= 0; --i) {
 		double sum = 0.0;
-		for (size_t j = i + 1; j < m_size; ++j) {
-			sum += matrixCopy[i][j] * solution[j];
+		for (size_t j = i + 1; j < m_rows; ++j) {
+			sum += matrixCopy[i * m_cols + j] * sol_data[j];
 		}
-		solution[i] = (matrixCopy[i][m_size] - sum) / matrixCopy[i][i];
+		sol_data[i] = (matrixCopy[i * m_cols + m_rows] - sum) / matrixCopy[i * m_cols + i];
 	}
 
 	return true;
@@ -123,48 +125,51 @@ bool GaussSolver::SolveGauss() {
 
 // --- Input/Output ---
 
-void GaussSolver::SetMatrix(const std::vector<std::vector<double>>& newMatrix, int rows, int cols){
-	if(m_size > 0)
-		matrix.clear();
-	if((size_t)rows >= newMatrix.size() || (size_t)cols >= newMatrix.size())	
-		throw std::out_of_range("Cant Set Matrix: Index is out of range.");
+void GaussSolver::SetMatrix(const std::vector<double>& newMatrix, size_t new_rows, size_t new_cols){
+	if(new_rows > newMatrix.size() || new_cols > newMatrix.size())	
+		throw std::out_of_range("Cant Set Matrix: Size is out of range.");
 	
-	m_size = rows >= cols ? rows : cols;
-	matrix.reserve(m_size);
-	for(size_t i = 0; i < m_size; i++){
-		//matrix[i].reserve(m_size + 1);
-		//for(size_t j = 0; j < m_size + 1; j++){
-			//matrix[i][j] = (i >= (size_t)rows || j >= (size_t)cols) ? 0.0 : newMatrix[i][j];
-		//}
+	m_rows = new_rows;
+	m_cols = new_cols;
+	mat_data.resize(m_rows * m_cols);
+
+	for(size_t i = 0; i < m_rows; i++){
+		for(size_t j = 0; j < m_cols; j++){
+			if (i < m_rows && j < m_cols) {
+				mat_data[i * m_cols + j] = newMatrix[i * m_cols + j];
+			} else {
+				mat_data[i * m_cols + j] = 0.0;
+			}
+		}
 	}
 }
 
 void GaussSolver::PrintMatrix() const {
-	if (m_size == 0) {
+	if (m_rows == 0 && m_cols == 0) {
 		std::cout << "[ GaussSolver is empty ]" << std::endl;
 		return;
 	}
 
-	std::cout << "Augmented GaussSolver (" << m_size << "x" << m_size + 1 << "):" << std::endl;
-	for (size_t i = 0; i < m_size; ++i) {
+	std::cout << "Augmented GaussSolver (" << m_rows << "x" << m_cols << "):" << std::endl;
+	for (size_t i = 0; i < m_rows; ++i) {
 		std::cout << "[ ";
-		for (size_t j = 0; j < m_size; ++j) {
-			std::cout << std::setw(8) << std::fixed << std::setprecision(3) << matrix[i][j] << " ";
+		for (size_t j = 0; j < m_cols; ++j) {
+			std::cout << std::setw(8) << std::fixed << std::setprecision(2) << mat_data[i * m_cols + j] << " ";
 		}
-		std::cout << "| " << std::setw(8) << std::fixed << std::setprecision(3) << matrix[i][m_size] << " ]\n";
+		std::cout << "| " << std::setw(8) << std::fixed << std::setprecision(2) << mat_data[i * m_cols + m_cols] << " ]\n";
 	}
 	std::cout.copyfmt(std::ios(NULL)); // Reset cout formatting
 }
 
-void PrintSolution(const std::vector<double>& solution) {
-    if (solution.empty()) {
-        std::cout << "No unique solution exists (matrix is singular)." << std::endl;
+void PrintSolution(const std::vector<double>& sol_data) {
+    if (sol_data.empty()) {
+        std::cout << "No unique sol_data exists (mat_data is singular)." << std::endl;
         return;
     }
 
     std::cout << "Solution (x):" << std::endl;
-    for (size_t i = 0; i < solution.size(); ++i) {
-        std::cout << "x[" << i << "] = " << solution[i] << std::endl;
+    for (size_t i = 0; i < sol_data.size(); ++i) {
+        std::cout << "x[" << i << "] = " << sol_data[i] << std::endl;
     }
 }
 
@@ -174,16 +179,17 @@ void GaussSolver::Serialize_Solution_TXT(const std::string& filename) const{
 		throw std::invalid_argument("Error: Could not open file for reading: " + filename);
 	}
 
-    if (solution.empty()) {
+    if (sol_data.empty()) {
         outFile << "0\n";
-        outFile << "No unique solution exists (matrix is singular)." << "\n";
+        outFile << "No unique sol_data exists (mat_data is singular)." << "\n";
     } else {
         //outFile << "Solution (x): ";
-        outFile << std::to_string(solution.size());
-        for(const double data : solution)
+        outFile << std::to_string(sol_data.size());
+        for(const double data : sol_data)
 			outFile << data << " ";
 	}
 }
+
 void GaussSolver::Deserialize_Solution_TXT(const std::string& filename){
 	std::ifstream inFile(filename);
 	if (!inFile.is_open()) {
@@ -191,23 +197,25 @@ void GaussSolver::Deserialize_Solution_TXT(const std::string& filename){
 	}
 
 	// 1. Read size
-	inFile >> m_size;
+	inFile >> m_rows;
 	if (inFile.fail()) 
 		throw std::runtime_error("Error during reading first line of the file: " + filename); // Check for read error
 
-	// 2. Resize solution size
-	solution.clear();
-	solution.resize(m_size);
+	// 2. Resize sol_data size
+	sol_data.clear();
+	sol_data.resize(m_rows);
 
-	// 3. Read solution data
-	for (size_t i = 0; i < m_size; i++) {
-		inFile >> solution[i];
+	// 3. Read sol_data data
+	for (size_t i = 0; i < m_rows; i++) {
+		inFile >> sol_data[i];
 		if (inFile.fail()) 
 			throw std::runtime_error("Error during reading the file: " + filename); // Check for read error
 	}
 
 	inFile.close();
 }
+
+
 
 void GaussSolver::Serialize_Matrix_TXT(const std::string& filename) const {
 	std::ofstream outFile(filename);
@@ -216,12 +224,12 @@ void GaussSolver::Serialize_Matrix_TXT(const std::string& filename) const {
 	}
 
 	// 1. Write size
-	outFile << m_size << "\n";
+	outFile << m_rows << " " << m_cols << "\n";
 
-	// 2. Write matrix data
-	for (size_t i = 0; i < m_size; ++i) {
-		for (size_t j = 0; j < m_size + 1; ++j) {
-			outFile << matrix[i][j] << (j == m_size ? "" : " ");
+	// 2. Write mat_data data
+	for (size_t i = 0; i < m_rows; ++i) {
+		for (size_t j = 0; j < m_cols; ++j) {
+			outFile << mat_data[i * m_cols + j] << (j == m_rows ? "" : " ");
 			}
 		outFile << "\n";
 	}
@@ -230,36 +238,38 @@ void GaussSolver::Serialize_Matrix_TXT(const std::string& filename) const {
 }
 
 void GaussSolver::Deserialize_Matrix_TXT(const std::string& filename) {
-	std::stringstream current_path;
-	current_path << std::filesystem::current_path();
-	
+
 	std::ifstream inFile(filename);
 	if (!inFile.is_open()) {
 		//std::cout << "Current CWD: " << std::filesystem::current_path() << std::endl; //debug
-		throw std::invalid_argument("Error: Could not open file for deserializing the matrix: " + filename + "\nin " + current_path.str());
+		throw std::invalid_argument("Error: Could not open file for deserializing the mat_data: " + filename);
 	}
 
 	// 1. Read size
-	inFile >> m_size;
-	if (inFile.fail()) 
+	inFile >> m_rows >> m_cols;
+	
+	if (inFile.fail() || m_rows == 0 || m_cols == 0 || m_cols != m_rows + 1)
 		throw std::runtime_error("Error during reading first line of the file: " + filename); // Check for read error
 
 	// 2. Resize matrix
-	matrix.clear();
-	matrix.resize(m_size);
-	for (std::vector<double>& row : matrix) {
-		row.resize(m_size + 1);
-	}
-
+	mat_data.resize(m_rows * m_cols);
+	
 	// 3. Read matrix data
-	for (size_t i = 0; i < m_size; ++i) {
-		for (size_t j = 0; j < m_size + 1; ++j) {
-			inFile >> matrix[i][j];
+	for (size_t i = 0; i < m_rows; i++) {
+		for (size_t j = 0; j < m_cols; j++) {
+			double temp_value;
+			inFile >> temp_value;
 			if (inFile.fail()) {
 				throw std::runtime_error("Error during reading the file: " + filename); // Check for read error
 			}
+			mat_data[i * m_cols + j] = temp_value;
 		}
 	}
+	
+	double test_value;
+	inFile >> test_value;
+	if(!inFile.fail())
+		throw std::runtime_error("Error: the file haven't been read entirely");
 
 	inFile.close();
 }
