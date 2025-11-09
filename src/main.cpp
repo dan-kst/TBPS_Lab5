@@ -1,118 +1,110 @@
 #include "GaussSolver.h"    // Our GaussSolver class
 #include <iostream>    // For std::cout
 #include <vector>
-#include <filesystem>
+#include <chrono>
 
 int main() {
-	/*
-	const std::string DESER_PATH = "./Lab5/test_matrix.txt";
-	const std::string SER_PATH = "./Lab5/generated_matrix.txt";
-	const std::string SOL_PATH = "./Lab5/generated_solution.txt";
-	std::cout << "--- Lab 5: Gaussian Elimination ---" << std::endl;
-
-	// --- Test 1: Solve a known 2x2 system from a file ---
-	std::cout << "\n--- Test 1: Loading from file 'test_matrix.txt' ---" << std::endl;
-	GaussSolver testMatrix(false);
-
-	// Try to load the file
-	if (!testMatrix.Deserialize_TXT(DESER_PATH)) {
-		std::cerr << "Failed to load '"<<  DESER_PATH << "'. Make sure it's in the right directory." << std::endl;
-		return 1; // Exit with an error
+	GaussSolver solver;
+	std::vector<long long> timer_records;
+	const int test_counts = 10;
+	timer_records.resize(test_counts*2);
+	
+	std::cout << "----- STARTING THE TEST -----\n";
+	
+	std::cout << "----- SMALL TEST CALCULATION -----\n";
+	for(int i = 2; i < test_counts - 2; i++){
+		std::string matrix_filename = 
+				"result_matrix_"
+				+ std::to_string(i) + "x" 
+				+ std::to_string(i + 1);
+		
+		std::string solution_filename = 
+				"result_solution_"
+				+ std::to_string(i) + "x" 
+				+ std::to_string(i + 1);
+		
+		solver.Generate((size_t)i, -50.0, 50.0);
+		solver.SolveGauss(false);
+		solver.Serialize_Matrix_TXT(matrix_filename);
+		std::cout << matrix_filename << " was saved successfully!" << std::endl;
+		solver.Serialize_Solution_TXT(solution_filename);
+		std::cout << solution_filename << " was saved successfully!" << std::endl << std::endl;
 	}
+	
+	std::cout << "\n\n\n----- BIG TEST CALCULATION -----\n";
+	std::cout << "\n\n----- SEQUANTIAL CALCULATION -----\n\n";
+	solver.Generate(1000, -100, 100);
+	// ----- SEQUANTUAL CALCULATIONS -----
+	for(int i = 0; i < test_counts; i++){
+		// 1. Get the time *before* the work
+		auto start_time = std::chrono::high_resolution_clock::now();
 
-	// Print the matrix we just loaded
-	std::cout << "Loaded GaussSolver:" << std::endl;
-	testMatrix.PrintMatrix();
+		// 2. Do the work
+		solver.SolveGauss(false);
 
-	// Solve the system
-	std::vector<double> solution = testMatrix.SolveGauss();
+		// 3. Get the time *after* the work
+		auto end_time = std::chrono::high_resolution_clock::now();
 
-	// Print the solution (we expect x=1, y=2)
-	std::cout << "\nSolution for Test 1:" << std::endl;
-	PrintSolution(solution);
-	std::cout << "(Expected: x[0] = 1, x[1] = 2)" << std::endl;
+		// 4. Calculate the duration
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-
-	// --- Test 2: Generate, solve, and save a random 4x4 system ---
-	std::cout << "\n--- Test 2: Generating a random 4x4 system ---" << std::endl;
-	GaussSolver randomMatrix;
-	randomMatrix.Generate(4, -10.0, 10.0); // 4x4 system, values from -10 to 10
-
-	std::cout << "Generated GaussSolver:" << std::endl;
-	randomMatrix.PrintMatrix();
-
-	// Save the generated matrix
-	randomMatrix.Serialize_TXT(SER_PATH);
-	std::cout << "\n(Saved to '" << SER_PATH << "')" << std::endl;
-
-	// Solve it
-	std::vector<double> randomSolution = randomMatrix.SolveGauss();
-
-	// Print the solution
-	std::cout << "\nSolution for Test 2:" << std::endl;
-	PrintSolution(randomSolution);
-
-	// Save the solution
-	SaveSolutionToFile(randomSolution, SOL_PATH);
-	std::cout << "(Solution saved to '" << SOL_PATH << "')" << std::endl;
-
-	std::cout << "\n--- Test 3: Timing a single 1000x1000 run ---" << std::endl;
-
-	GaussSolver largeMatrix;
-	const size_t large_size = 1000;
-
-	// 1. Generate data (not timed)
-	std::cout << "Generating " << large_size << "x" << large_size << " matrix..." << std::endl;
-	largeMatrix.Generate(large_size, -10.0, 10.0);
-	std::cout << "Generation complete." << std::endl;
-
-	// 2. Start the timer
-	auto start_time = std::chrono::high_resolution_clock::now();
-
-	// 3. Run the solver
-	std::vector<double> largeSolution = largeMatrix.SolveGauss();
-
-	// 4. Stop the timer
-	auto stop_time = std::chrono::high_resolution_clock::now();
-
-	// 5. Calculate the duration
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time);
-
-	if (!largeSolution.empty()) {
-		std::cout << "Solver finished in " << duration.count() << " milliseconds." << std::endl;
-	} else {
-		std::cout << "Solver finished (matrix was singular) in " << duration.count() << " milliseconds." << std::endl;
+		// Add the time in microseconds
+		timer_records[i] = duration.count();
+		std::cout << "Test " + std::to_string(i + 1) + " finished in " 
+			+ std::to_string(timer_records[i]) + "ms.\n";
 	}
+	
+	
+	std::cout << "\n\n----- PARALLEL(OpenMP) CALCULATION -----\n\n";
+	// ----- PARALLEL CALCULATIONS -----
+	for(int i = 0; i < test_counts; i++){
+		// 1. Get the time *before* the work
+		auto start_time = std::chrono::high_resolution_clock::now();
 
+		// 2. Do the work
+		solver.SolveGauss(true);
 
-	// --- Test 4: Average time over 10 runs ---
-	std::cout << "\n--- Test 4: Averaging 10 runs (" << large_size << "x" << large_size << ") ---" << std::endl;
+		// 3. Get the time *after* the work
+		auto end_time = std::chrono::high_resolution_clock::now();
 
-	const int num_runs = 10;
-	std::vector<long long> run_times_ms; // To store durations in milliseconds
+		// 4. Calculate the duration
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-	for (int i = 0; i < num_runs; ++i) {
-		// We re-generate the matrix each time to prevent any caching
-		// and ensure a fair test, but we won't time the generation.
-		largeMatrix.Generate(large_size, -10.0, 10.0);
-
-		auto start = std::chrono::high_resolution_clock::now();
-
-		largeMatrix.SolveGauss();
-
-		auto stop = std::chrono::high_resolution_clock::now();
-
-		auto time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
-		std::cout << "Run " << (i + 1) << " took " << time_ms << " ms." << std::endl;
-		run_times_ms.push_back(time_ms);
+		// Add the time in microseconds
+		timer_records[i + test_counts] = duration.count();
+		std::cout << "Test " + std::to_string(i + 1) + " finished in "
+			+ std::to_string(timer_records[i + test_counts]) + "ms.\n";
 	}
-
-	// Calculate the average
-	double average_time = std::accumulate(run_times_ms.begin(), run_times_ms.end(), 0.0) / num_runs;
-
-	std::cout << "------------------------------------------" << std::endl;
-	std::cout << "Average solver time: " << average_time << " milliseconds." << std::endl;
-
-	std::cout << "\n--- All tests complete. ---" << std::endl;*/
+	
+	long double seq_aver_time = 0.0;
+	long double paral_aver_time = 0.0;
+	
+	short leftw = 10;
+	short rightw = 10;
+	short centerw = 5;
+	short prec = 2;
+	
+	std::cout << "\nFinal Results:\n";
+	std::cout << std::setw(leftw) << "SEQUANTUAL";
+	std::cout << std::setw(centerw) << "|";
+	std::cout << std::setw(rightw) << "PARALLEL";
+	std::cout << std::endl;
+	
+	for(size_t i = 0; i < test_counts; i++){
+		seq_aver_time += (long double)timer_records[i];
+		paral_aver_time += (long double)timer_records[i + test_counts];
+		std::cout << std::setw(leftw) << (std::to_string(timer_records[i]) + "ms");
+		std::cout << std::setw(centerw) << "|";
+		std::cout << std::setw(rightw) << (std::to_string(timer_records[i + test_counts]) + "ms");
+		std::cout << std::endl;
+	}
+	seq_aver_time /= (long double)test_counts;
+	paral_aver_time /= (long double)test_counts;
+	
+	std::cout << "\nAverage:\n";
+	std::cout << std::setw(leftw - prec) << std::fixed << std::setprecision(prec) << seq_aver_time << "ms";
+	std::cout << std::setw(centerw) << "|";
+	std::cout << std::setw(rightw - prec) << std::fixed << std::setprecision(prec) << paral_aver_time << "ms";
+	std::cout << std::endl;
 	return 0;
 }

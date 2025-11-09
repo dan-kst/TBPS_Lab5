@@ -209,7 +209,6 @@ void GaussSolver::Serialize_Solution_TXT(const std::string& filename) const{
         outFile << "0\n";
         outFile << "No unique sol_data exists (mat_data is singular)." << "\n";
     } else {
-        //outFile << "Solution (x): ";
         outFile << std::to_string(sol_data.size());
         for(const double data : sol_data)
 			outFile << data << " ";
