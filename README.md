@@ -79,10 +79,10 @@ After compiling, the executable will be located in the `build` directory.
 ### Running the Program
 
 #### Linux / MacOS
-./build/lab6_program
+./build/lab5_program
 
 #### Windows
-.\build\lab6_program.exe
+.\build\lab5_program.exe
 
 ## Input File Format
 
