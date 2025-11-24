@@ -8,9 +8,6 @@ tests_dep = [gtest_dep, lab5_dep]
 
 
 # 2.2 Form source files
-
-#subdir('samples')
-
 test_sources = [
 	'test_lab5.cpp'
 ]
@@ -20,8 +17,7 @@ test_exe = executable(
 	'lab5_tests_run', 
 	test_sources, 
 	dependencies: tests_dep,
-	include_directories: ['.', 'samples']
-#	link_depends: test_matrixes
+	include_directories: ['.']
 )
 
 # 4. Register it as a test

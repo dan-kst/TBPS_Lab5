@@ -202,14 +202,14 @@ void GaussSolver::PrintSolution() const{
 void GaussSolver::Serialize_Solution_TXT(const std::string& filename) const{
     std::ofstream outFile(filename);
   	if (!outFile.is_open()) {
-		throw std::invalid_argument("Error: Could not open file for reading: " + filename);
+		throw std::invalid_argument("Error: Could not open file for writing: " + filename);
 	}
 
     if (sol_data.empty()) {
         outFile << "0\n";
         outFile << "No unique sol_data exists (mat_data is singular)." << "\n";
     } else {
-        outFile << std::to_string(sol_data.size());
+        outFile << std::to_string(sol_data.size()) << "\n";
         for(const double data : sol_data)
 			outFile << data << " ";
 	}
@@ -245,7 +245,7 @@ void GaussSolver::Deserialize_Solution_TXT(const std::string& filename){
 void GaussSolver::Serialize_Matrix_TXT(const std::string& filename) const {
 	std::ofstream outFile(filename);
 	if (!outFile.is_open()) {
-		throw std::invalid_argument("Error: Could not open file for reading: " + filename);
+		throw std::invalid_argument("Error: Could not open file for writing: " + filename);
 	}
 
 	// 1. Write size

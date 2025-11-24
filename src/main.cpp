@@ -6,13 +6,18 @@
 int main() {
 	GaussSolver solver;
 	std::vector<long long> timer_records;
-	const int test_counts = 10;
-	timer_records.resize(test_counts*2);
+	const int TEST_COUNTS = 10;
+	const int MATRIX_SIZE = 1000;
+	const int NUM_RANGE_MIN = -100;
+	const int NUM_RANGE_MAX = 100;
+	const std::string FILE_PATH = "./src/";
+
+	timer_records.resize(TEST_COUNTS*2);
 	
 	std::cout << "----- STARTING THE TEST -----\n";
 	
 	std::cout << "----- SMALL TEST CALCULATION -----\n";
-	for(int i = 2; i < test_counts - 2; i++){
+	for(int i = 2; i < TEST_COUNTS - 2; i++){
 		std::string matrix_filename = 
 				"result_matrix_"
 				+ std::to_string(i) + "x" 
@@ -25,17 +30,17 @@ int main() {
 		
 		solver.Generate((size_t)i, -50.0, 50.0);
 		solver.SolveGauss(false);
-		solver.Serialize_Matrix_TXT(matrix_filename);
+		solver.Serialize_Matrix_TXT(FILE_PATH + matrix_filename);
 		std::cout << matrix_filename << " was saved successfully!" << std::endl;
-		solver.Serialize_Solution_TXT(solution_filename);
+		solver.Serialize_Solution_TXT(FILE_PATH + solution_filename);
 		std::cout << solution_filename << " was saved successfully!" << std::endl << std::endl;
 	}
 	
 	std::cout << "\n\n\n----- BIG TEST CALCULATION -----\n";
 	std::cout << "\n\n----- SEQUANTIAL CALCULATION -----\n\n";
-	solver.Generate(1000, -100, 100);
+	solver.Generate(MATRIX_SIZE, NUM_RANGE_MIN, NUM_RANGE_MAX);
 	// ----- SEQUANTUAL CALCULATIONS -----
-	for(int i = 0; i < test_counts; i++){
+	for(int i = 0; i < TEST_COUNTS; i++){
 		// 1. Get the time *before* the work
 		auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -57,7 +62,7 @@ int main() {
 	
 	std::cout << "\n\n----- PARALLEL(OpenMP) CALCULATION -----\n\n";
 	// ----- PARALLEL CALCULATIONS -----
-	for(int i = 0; i < test_counts; i++){
+	for(int i = 0; i < TEST_COUNTS; i++){
 		// 1. Get the time *before* the work
 		auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -71,9 +76,9 @@ int main() {
 		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
 		// Add the time in microseconds
-		timer_records[i + test_counts] = duration.count();
+		timer_records[i + TEST_COUNTS] = duration.count();
 		std::cout << "Test " + std::to_string(i + 1) + " finished in "
-			+ std::to_string(timer_records[i + test_counts]) + "ms.\n";
+			+ std::to_string(timer_records[i + TEST_COUNTS]) + "ms.\n";
 	}
 	
 	long double seq_aver_time = 0.0;
@@ -90,16 +95,16 @@ int main() {
 	std::cout << std::setw(rightw) << "PARALLEL";
 	std::cout << std::endl;
 	
-	for(size_t i = 0; i < test_counts; i++){
+	for(size_t i = 0; i < TEST_COUNTS; i++){
 		seq_aver_time += (long double)timer_records[i];
-		paral_aver_time += (long double)timer_records[i + test_counts];
+		paral_aver_time += (long double)timer_records[i + TEST_COUNTS];
 		std::cout << std::setw(leftw) << (std::to_string(timer_records[i]) + "ms");
 		std::cout << std::setw(centerw) << "|";
-		std::cout << std::setw(rightw) << (std::to_string(timer_records[i + test_counts]) + "ms");
+		std::cout << std::setw(rightw) << (std::to_string(timer_records[i + TEST_COUNTS]) + "ms");
 		std::cout << std::endl;
 	}
-	seq_aver_time /= (long double)test_counts;
-	paral_aver_time /= (long double)test_counts;
+	seq_aver_time /= (long double)TEST_COUNTS;
+	paral_aver_time /= (long double)TEST_COUNTS;
 	
 	std::cout << "\nAverage:\n";
 	std::cout << std::setw(leftw - prec) << std::fixed << std::setprecision(prec) << seq_aver_time << "ms";
